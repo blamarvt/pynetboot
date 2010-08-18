@@ -13,9 +13,11 @@
 # limitations under the License.
 import socket, IN
 import select
+import shelve
 
-from pynetboot.packet import DhcpPacket
-from pynetboot.lease import DhcpLease
+from packet import DhcpPacket
+from constants import *
+#from pynetboot.lease import DhcpLease
 
 # Thanks to Microsoft for http://support.microsoft.com/kb/169289
 
@@ -40,42 +42,59 @@ class DhcpServer(object):
 			try:
 				input, _ , _ = select.select([self.socket],[],[])
 				(data, src_ip) = self.socket.recvfrom(65535)
+
 				packet = DhcpPacket(data)
 
-				if packet.type == p_types.DHCPDISCOVER:
+				print packet
+
+				"""		
+				if packet.op == DHCPDISCOVER:
 					self.handle_discover(packet)
 	
-				elif packet.type == p_types.DHCPREQUEST:
+				elif packet.op == DHCPREQUEST:
 					self.handle_request(packet)
 
-				elif packet.type == p_types.DHCPDECLINE:
+				elif packet.op == DHCPDECLINE:
 					self.handle_decline(packet)
 	
-				elif packet.type == p_types.DHCPRELEASE:
+				elif packet.op == DHCPRELEASE:
 					self.handle_release(packet)
 
 				else:
 					# DHCPINFORM and others that we don't currently support
 					self.handle_unknown(packet) 
-
+				"""
 			except KeyboardInterrupt:
 				self._keep_going = False
 
-		def handle_discover(in_pkt):
-			out_pkt = DhcpPacket()
-			out_pkt.op = p_types.DHCPOFFER
-			out_pkt.yiaddr = 
-		def handle_request(pkt):
-			pass
+	def handle_discover(self, in_pkt):
+		out_pkt = DhcpPacket()
+		out_pkt.op = 2 # BOOTREPLY
+		out_pkt.htype = in_pkt.htype
+		out_pkt.hlen = in_pkt.hlen
+		out_pkt.xid = in_pkt.xid
+		out_pkt.yiaddr = "169.254.1.100" # Proposed IP for client
+		out_pkt.chaddr = in_pkt.chaddr # Client's MAC
+		out_pkt.set_option(1, "255.255.0.0") # Subnet Mask
+		out_pkt.set_option(51, 3600) # Lease Time
+		out_pkt.set_option(53, DHCPOFFER) # Message Type
+	
+		self.send(out_pkt)	
 
-		def handle_decline(pkt):
-			pass
+	def handle_request(self, pkt):
+		pass
 
-		def handle_release(pkt):
-			pass
+	def handle_decline(self, pkt):
+		pass
 
-		def handle_unknown(pkt):
-			pass
+	def handle_release(self, pkt):
+		pass
+
+	def handle_unknown(self, pkt):
+		pass
+
+	def send(self, pkt):
+		print pkt.to_byte_list()
 
 if __name__ == "__main__":
 	server = DhcpServer()

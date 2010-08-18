@@ -14,7 +14,57 @@
 #
 # Helpful Link: http://www.networksorcery.com/enp/protocol/bootp/options.htm 
 
-option_dispatcher = {
+DHCPDISCOVER = 1
+DHCPOFFER = 2
+DHCPREQUEST = 3
+DHCPACK = 4
+DHCPNAK = 5
+
+TYPE_FORMATS = {
+	'ip'     : '4B',
+	'char'   : 'B',
+	's32'    : 'i',
+	'u32'    : 'I',
+	's16'    : 'h',
+	'u16'    : 'H',
+	'bool'   : '?',
+	'mac'    : '6B',
+	'mac+10extra'      : '16B',
+	'type_major_minor' : '3B',
+
+	# Custom Formats (not to be used with pack_into/unpack)
+	'string'          : '|c',
+	'ip_list'         : '4cX', 
+	'ip_netmask_list' : '8cX', 
+	'u16_list'        : 'HX', 
+	'char_list'       : 'BX',
+
+	# Really special...and sometimes confusing...
+	'rfc4578_client_id_61' : '|B',
+	'rfc4578_client_id_97' : '|B',
+	'user_class_data'      : '|B',
+	'etherboot'            : '|B',
+	'parameter_list'       : '|B',
+}
+
+RFC2131_HEADER = [
+	['op',      1, 'char'],
+	['htype',   1, 'char'],
+	['hlen',    1, 'char'],
+	['hops',    1, 'char'],
+	['xid',     4, 'u32'],
+	['secs',    2, 'u16'],
+	['flags',   2, 'u16'],
+	['ciaddr',  4, 'ip'],
+	['yiaddr',  4, 'ip'],
+	['siaddr',  4, 'ip'],
+	['giaddr',  4, 'ip'],
+	['chaddr', 16, 'mac+10extra'],
+	['sname',  64, 'string'],
+	['file',  128, 'string']
+]
+
+VENDOR_OPTIONS = {
 	1 : {
 		'type' : 'ip',
 		'name' : 'subnet_mask'
@@ -139,6 +189,10 @@ option_dispatcher = {
 		'type' : 'char',
 		'name' : 'dhcp_message_type'
 	},
+	55 : {
+		'type' : 'parameter_list',
+		'name' : 'parameter_list_request'
+	},
 	57 : {
 		'type' : 'u16',
 		'name' : 'max_dhcp_message_size'
@@ -148,15 +202,27 @@ option_dispatcher = {
 		'name' : 'vendor_class_id'
 	},
 	61 : {
-		'type' : 'mac61',
-		'name' : 'client_uuid_61'
+		'type' : 'rfc4578_client_id_61',
+		'name' : 'rfc4578_client_id_61'
+	},
+	77 : {
+		'type' : 'user_class_data',
+		'name' : 'user_class_data'
+	},
+	93 : {
+		'type' : 'u16',
+		'name' : 'client_arch'
 	},
 	94 : {
 		'type' : 'type_major_minor',
 		'name' : 'client_nic_id'
 	},
 	97 : {
-		'type' : 'uuid16',
-		'name' : 'client_uuid_97'
+		'type' : 'rfc4578_client_id_97',
+		'name' : 'rfc4578_client_id_97'
+	},
+	175 : {
+		'type' : 'etherboot',
+		'name' : 'etherboot'
 	}
 }
