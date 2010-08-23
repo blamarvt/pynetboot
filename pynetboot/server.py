@@ -15,24 +15,24 @@ import socket, IN
 import select
 import shelve
 
-from packet import DhcpPacket
+from packet import *
 from constants import *
-#from pynetboot.lease import DhcpLease
 
 # Thanks to Microsoft for http://support.microsoft.com/kb/169289
 
 class DhcpServer(object):
 
-	def __init__(self, interface='', port=67):
+	def __init__(self, interface='', recv_port=67, send_port=68):
 		self.interface = interface
-		self.port = port
+		self.recv_port = recv_port
+		self.send_port = send_port
 		self.db = shelve.open('pynetboot.db')		
 
 		self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 		self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 		self.socket.setsockopt(socket.SOL_SOCKET, IN.SO_BINDTODEVICE, self.interface + '\0')
 
-		self.socket.bind(('', self.port))
+		self.socket.bind(('', self.recv_port))
 
 	def run(self):
 		self._keep_going = True
@@ -45,9 +45,6 @@ class DhcpServer(object):
 
 				packet = DhcpPacket(data)
 
-				print packet
-
-				"""		
 				if packet.op == DHCPDISCOVER:
 					self.handle_discover(packet)
 	
@@ -63,23 +60,17 @@ class DhcpServer(object):
 				else:
 					# DHCPINFORM and others that we don't currently support
 					self.handle_unknown(packet) 
-				"""
+
 			except KeyboardInterrupt:
 				self._keep_going = False
 
 	def handle_discover(self, in_pkt):
-		out_pkt = DhcpPacket()
-		out_pkt.op = 2 # BOOTREPLY
-		out_pkt.htype = in_pkt.htype
-		out_pkt.hlen = in_pkt.hlen
-		out_pkt.xid = in_pkt.xid
-		out_pkt.yiaddr = "169.254.1.100" # Proposed IP for client
-		out_pkt.chaddr = in_pkt.chaddr # Client's MAC
-		out_pkt.set_option(1, "255.255.0.0") # Subnet Mask
-		out_pkt.set_option(51, 3600) # Lease Time
-		out_pkt.set_option(53, DHCPOFFER) # Message Type
-	
-		self.send(out_pkt)	
+		try:
+			self.send(DhcpOfferPacket(in_pkt.data))
+		except Exception, e:
+			import traceback
+			traceback.print_exc()
+			print "Not offering due to %s" % type(e)
 
 	def handle_request(self, pkt):
 		pass
@@ -94,7 +85,9 @@ class DhcpServer(object):
 		pass
 
 	def send(self, pkt):
-		print pkt.to_byte_list()
+		data = list(pkt)
+		print data
+		self.socket.sendto("".join(data), 0, ('<broadcast>', self.send_port))
 
 if __name__ == "__main__":
 	server = DhcpServer()

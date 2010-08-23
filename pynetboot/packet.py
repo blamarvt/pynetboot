@@ -26,22 +26,23 @@ class DhcpPacket(object):
 		self.debug = kwargs.get("debug", False)
 		self.data = data 
 
-		self.rfc_headers = {}
-		self.vendor_options = {}
+		self.options = {}
 
 		if data:
-			self._parse()
+			self._parse()	
 	
-	def __getattr__(self, name):
-		for k, v in self.rfc_headers.iteritems():
+	def getopt(self, name):
+		for k, v in self.options.iteritems():
 			if k == name:
-				header = self.rfc_headers[k]
-				return self.format(header["format"], header["data"])
+				option = self.options[k]
+				return self.format(option["format"], option["data"])
 
-		for k, v in self.vendor_options.iteritems():
-			if k == name:
-				option = self.vendor_options[k]
-				return self.format(VENDOR_OPTIONS[k]["type"], option)
+	def setopt(self, name, value):
+		pass
+
+	def __iter__(self):
+		for header in RFC2131_HEADER:
+			yield self.getopt(header[0])
 	
 	def __str__(self):
 		return """
@@ -59,16 +60,16 @@ Vendor Options
 		
 		for segment in RFC2131_HEADER:
 			name, obj, offset = self._get_header_data(segment, self.data, offset)
-			self.rfc_headers[name] = obj
+			self.options[name] = obj
 
 		cookie = self.data[offset:offset+4]
 		offset = offset + 4
 
-		vendor_op, data, offset = self._get_vendor_op(self.data, offset) # Prime
+		vendor_op, obj, offset = self._get_vendor_op(self.data, offset) # Prime
 
 		while vendor_op != 255:
-			self.vendor_options[vendor_op] = data
-			vendor_op, data, offset = self._get_vendor_op(self.data, offset)
+			self.options[vendor_op] = obj
+			vendor_op, obj, offset = self._get_vendor_op(self.data, offset)
 
 	def _get_vendor_op(self, data, offset):
 		op = unpack("!B", data[offset])[0]
@@ -76,9 +77,9 @@ Vendor Options
 		if op not in [0, 255]:
 			length = unpack("!B", data[offset+1])[0]
 			offset = offset + 2
-			return op, data[offset:offset+length], offset+length
+			return op, { "format" : TYPE_FORMATS[VENDOR_OPTIONS[op]], "data" : data[offset:offset+length] }, offset+length
 		
-		return op, 0, (offset + 1)
+		return op, None, (offset + 1)
 
 	def _get_header_data(self, segment, data, offset):
 		length = segment[1]
@@ -110,3 +111,10 @@ Vendor Options
 			return "".join(["%0X" % d for d in data])
 
 		return data[0]
+
+class DhcpOfferPacket(DhcpPacket):
+	def __init__(self, data=None, **kwargs):
+		DhcpPacket.__init__(self, data, **kwargs)
+
+		self.op = 2
+		self.yiaddr = 
