@@ -118,7 +118,7 @@ class RawDhcpPacket(object):
 import unittest
 class TestDhcpPacket(unittest.TestCase):
 	def testPacket(self):
-		octets = open('dhcp_discover').read()
+		octets = open('../testdata/dhcp_discover').read()
 		p = DhcpPacket.from_wire(octets)
 		self.assertEquals(p.op, 1)
 		self.assertEquals(p.htype, 1)
