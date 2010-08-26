@@ -17,6 +17,7 @@ import select
 import shelve
 import sys
 import dpkt
+import os
 import logging
 
 from pynetboot.packet import *
@@ -42,6 +43,8 @@ class DhcpServer(object):
 
 	def run(self):
 		self._keep_going = True
+
+		logging.info("Entering DhcpServer recv loop...")
 
 		while self._keep_going:
 		
@@ -70,6 +73,49 @@ class DhcpServer(object):
 		offer_pkt = RawDhcpPacket(packet)
 		self.raw_socket.send(str(offer_pkt))
 		logging.info("Sent DHCPOFFER to %s" % DHCP_TYPE_MAC.load(packet.chaddr[:6])[1])
+
+class GpxeDhcpServer(DhcpServer):
+	def __init__(self, *args, **kwargs):
+		DhcpServer.__init__(self, *args, **kwargs)
+
+		tftp_path = kwargs.get("tftp_path", "/tftpboot")
+		tftp_port = kwargs.get("tftp_port", 69)
+		boot_file = kwargs.get("boot_file", "gpxelinux.0")
+
+		ip, netmask, gateway = ("169.254.1.10","255.255.0.0","169.254.0.1")
+
+		# Craft gPXE packet
+		self.packet = DhcpPacket()
+		self.packet.file = "gpxelinux.0"
+		self.packet.siaddr = self.ip
+		self.packet.set_network(ip, netmask, gateway)
+		self.packet.set_option(54, self.ip, DHCP_TYPE_IPV4)
+		self.packet.set_option(208, "\xf1\x00\x74\x7e")
+		self.packet.set_option(210, "http://boot.bcb1a.rsapps.net/pxe/", DHCP_TYPE_STRING)
+
+		if os.path.exists("%s/%s" % (tftp_path, boot_file)):
+			from multiprocessing import Process
+			p = Process(target=self._tftp, args=(tftp_path, tftp_port))
+			p.start()
+		else:
+			logging.warn("Not loading TFTP server (%s/%s does not exist)" % (tftp_path, boot_file))
+
+	def _tftp(self, path, port):
+		import tftpy
+		self.tftp_server = tftpy.TftpServer(path)
+		self.tftp_server.listen('', port)
+	
+	def handle_request(self, packet):
+		logging.info("Handling DHCPREQUEST from %s" % DHCP_TYPE_MAC.load(packet.chaddr[:6])[1])
+		self.packet.join_sequence(packet.chaddr, packet.xid)
+		self.packet.set_option(53, 5, DHCP_TYPE_UINT8)
+		self.send_ack(self.packet)
+
+	def handle_discover(self, packet):
+		logging.info("Handling DHCPDISCOVER from %s" % DHCP_TYPE_MAC.load(packet.chaddr[:6])[1])
+		self.packet.join_sequence(packet.chaddr, packet.xid)
+		self.packet.set_option(53, 2, DHCP_TYPE_UINT8)
+		self.send_offer(self.packet)
 
 class StaticDhcpServer(DhcpServer):
 	def __init__(self, mac_to_ip, *args, **kwargs):

@@ -70,7 +70,7 @@ class DhcpOctetsType(DhcpDataType):
 		return octets[length:], octets[:length]
 
 	def dump(self, value):
-		if len(value) != self._num_octets:
+		if self._num_octets and len(value) != self._num_octets:
 			raise ValueError("value must be exactly %d octets" % self._num_octets)
 		return value
 
