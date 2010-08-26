@@ -86,12 +86,12 @@ class GpxeDhcpServer(DhcpServer):
 
 		# Craft gPXE packet
 		self.packet = DhcpPacket()
-		self.packet.file = "gpxelinux.0"
+		self.packet.file = boot_file
 		self.packet.siaddr = self.ip
 		self.packet.set_network(ip, netmask, gateway)
 		self.packet.set_option(54, self.ip, DHCP_TYPE_IPV4)
 		self.packet.set_option(208, "\xf1\x00\x74\x7e")
-		self.packet.set_option(210, "http://boot.bcb1a.rsapps.net/pxe/", DHCP_TYPE_STRING)
+		self.packet.set_option(210, "http://%s/" % self.ip, DHCP_TYPE_STRING)
 
 		if os.path.exists("%s/%s" % (tftp_path, boot_file)):
 			from multiprocessing import Process
