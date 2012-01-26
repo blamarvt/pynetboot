@@ -1,136 +1,129 @@
+import collections
+import sys
+
 import dpkt
 
-from pynetboot.types import *
+import pynetboot
 
-_dhcp_headers = [
-	("op", DHCP_TYPE_UINT8, 2), # Default to sending to client (2)
-	("htype", DHCP_TYPE_UINT8, 1), # Default to Ethernet
-	("hlen", DHCP_TYPE_UINT8, 6), # Default to 6 byte MAC
-	("hops", DHCP_TYPE_UINT8),   
-	("xid", DHCP_TYPE_UINT32),
-	("secs", DHCP_TYPE_UINT16),
-	("flags", DHCP_TYPE_UINT16),
-	("ciaddr", DHCP_TYPE_IPV4),
-	("yiaddr", DHCP_TYPE_IPV4),
-	("siaddr", DHCP_TYPE_IPV4),
-	("giaddr", DHCP_TYPE_IPV4),
-	("chaddr", DhcpOctetsType(16)),
-	("sname", DhcpStringType(64)),
-	("file", DhcpStringType(128)),
-]
-
-_dhcp_headers = map(lambda args: DhcpHeader(*args), _dhcp_headers)
 
 class DhcpPacket(object):
-	MAGIC_COOKIE = "\x63\x82\x53\x63" # made of rainbow chocolate
+    """A single packet using the DHCP protocol."""
+    MAGIC_COOKIE = "\x63\x82\x53\x63" # made of rainbow chocolate
 
-	@classmethod
-	def from_wire(cls, octets):
-		self = cls()
-		for header_def in _dhcp_headers:
-			octets, value = header_def.load(octets)
-			self._headers[header_def.name] = value
-		
-		octets, cookie_value = octets[4:], octets[:4]
-		if cookie_value != self.MAGIC_COOKIE:
-			raise ValueError("expecting dhcp/bootp magic cookie (RFC 1497), got %r" % cookie_value)
-		
-		while True:
-			octets, option_code = DHCP_TYPE_UINT8.load(octets)
-			if option_code == 0:
-				continue
-			elif option_code == 255:
-				break
-			
-			octets, option_len = DHCP_TYPE_UINT8.load(octets)
-			octets, option_octets = octets[option_len:], octets[:option_len]
-			self._options[option_code] = option_octets
-			
-		return self
+    def __init__(self):
+        """Initialize a DHCP packet."""
+        self.headers = collections.OrderedDict([
+            ("op", pynetboot.UInt8(default=2)), # Default to sending to client
+            ("htype", pynetboot.UInt8(default=1)), # Default to Ethernet
+            ("hlen", pynetboot.UInt8(default=6)), # Default to 6 byte MAC
+            ("hops", pynetboot.UInt8()),
+            ("xid", pynetboot.UInt32()),
+            ("secs", pynetboot.UInt16()),
+            ("flags", pynetboot.UInt16()),
+            ("ciaddr", pynetboot.IPv4Address()),
+            ("yiaddr", pynetboot.IPv4Address()),
+            ("siaddr", pynetboot.IPv4Address()),
+            ("giaddr", pynetboot.IPv4Address()),
+            ("chaddr", pynetboot.Octets(length=16)),
+            ("sname", pynetboot.String(length=64)),
+            ("file", pynetboot.String(length=128)),
+        ])
+        self.options = collections.OrderedDict()
 
-	def __init__(self):
-		self._headers = {}
-		self._options = {}
+    def __getattr__(self, attr_name):
+        """Return relevant attribute."""
+        if attr_name in self.headers.keys():
+            return self.headers[attr_name].value
+        else:
+            return object.getattr(self, attr_name)
 
-		for header_def in _dhcp_headers:
-			self._headers[header_def.name] = header_def.default_value
+    @classmethod
+    def from_wire(cls, octets):
+        """Create a packet from octets."""
+        packet = cls()
+        for header_name, header in packet.headers.iteritems():
+            octets = header.load_octets(octets)
 
-	def to_wire(self):
-		octets = []
-		for header_def in _dhcp_headers:
-			value = self._headers[header_def.name]
-			octets.append(header_def.dump(value))
-		
-		octets.append(self.MAGIC_COOKIE)
+        octets, cookie_value = octets[4:], octets[:4]
 
-		for option_code, option_octets in self._options.iteritems():
-			octets.append(DHCP_TYPE_UINT8.dump(option_code))
-			octets.append(DHCP_TYPE_UINT8.dump(len(option_octets)))
-			octets.append(option_octets)
-		
-		octets.append("\xff")
-		return ''.join(octets)
+        if cookie_value != DhcpPacket.MAGIC_COOKIE:
+            raise ValueError("expecting magic cookie (RFC 1497), "
+                             "got %r" % cookie_value)
 
-	def set_network(self, ip, netmask, gateway):
-		self.yiaddr = ip
-		self.set_option(1, netmask, DHCP_TYPE_IPV4)
-		self.set_option(3, gateway, DHCP_TYPE_IPV4)
+        while True:
+            option_code = pynetboot.UInt8()
+            option_len = pynetboot.UInt8()
+            octets = option_code.load_octets(octets)
+            if option_code.value == 0: continue
+            if option_code.value == 255: break
+            octets = option_len.load_octets(octets)
+            packet.options[option_code.value] = octets[:option_len.value]
+            octets = octets[option_len.value:]
 
-	def join_sequence(self, client_mac, xid):
-		self.chaddr = client_mac
-		self.xid = xid
+        return packet
 
-	def set_option(self, code, value, dhcp_type=DHCP_TYPE_OCTETS):
-		self._options[code] = dhcp_type.dump(value)
+    def to_wire(self):
+        octets = []
+        for header_name, header in self.headers.iteritems():
+            octets.append(header.get_octets())
 
-	def get_option(self, code, dhcp_type=DHCP_TYPE_OCTETS):
-		leftover, value = dhcp_type.load(self._options[code])
-		assert not leftover
-		return value
+        octets.append(self.MAGIC_COOKIE)
 
-for _header_def in _dhcp_headers:
-	setattr(DhcpPacket, _header_def.name, _header_def)
+        for option_code, option_octets in self.options.iteritems():
+            code = pynetboot.UInt8()
+            code.value = option_code
+            option_len = pynetboot.UInt8()
+            option_len.value = len(option_octets)
+            octets.append(code.get_octets())
+            octets.append(option_len.get_octets())
+            octets.append(option_octets)
+
+        octets.append("\xff")
+        print >>sys.stderr
+        print >>sys.stderr, octets
+        print >>sys.stderr
+        return ''.join(octets)
+
+    def set_network(self, ip, netmask, gateway):
+        self.yiaddr = ip
+        self.set_option(1, netmask, IPV4)
+        self.set_option(3, gateway, IPV4)
+
+    def join_sequence(self, client_mac, xid):
+        self.chaddr = client_mac
+        self.xid = xid
+
+    def set_option(self, code, value, dhcp_type=pynetboot.Octets):
+        self.options[code] = dhcp_type.dump(value)
+
+    def get_option(self, code, datavar):
+        leftover = datavar.load_octets(self.options[code])
+        assert not leftover
+        return datavar.value
+
 
 class RawDhcpPacket(object):
-	def __init__(self, packet):
-		u = dpkt.udp.UDP()
-		u.dport = 68
-		u.sport = 67
-		u.data = packet.to_wire()
-		u.ulen += len(u.data)
+    def __init__(self, packet):
+        u = dpkt.udp.UDP()
+        u.dport = 68
+        u.sport = 67
+        u.data = packet.to_wire()
+        u.ulen += len(u.data)
 
-		ip_p = dpkt.ip.IP()
-		ip_p.p = 17
-		ip_p.dst = DHCP_TYPE_IPV4.dump(packet.yiaddr)
-		ip_p.data = u.pack()
-		ip_p.len += len(u)
+        ip_p = dpkt.ip.IP()
+        ip_p.p = 17
+        ip_p.dst = IPV4.dump(packet.yiaddr)
+        ip_p.data = u.pack()
+        ip_p.len += len(u)
 
-		pkt = dpkt.ethernet.Ethernet()
-		pkt.dst = packet.chaddr[:6]
-		pkt.data = ip_p.pack()
-		pkt.type = dpkt.ethernet.ETH_TYPE_IP
+        pkt = dpkt.ethernet.Ethernet()
+        pkt.dst = packet.chaddr[:6]
+        pkt.data = ip_p.pack()
+        pkt.type = dpkt.ethernet.ETH_TYPE_IP
 
-		self.pkt = pkt
+        self.pkt = pkt
 
-	def __str__(self):
-		return str(self.pkt)
+    def __str__(self):
+        return str(self.pkt)
 
-import unittest
-class TestDhcpPacket(unittest.TestCase):
-	def testPacket(self):
-		octets = open('../testdata/dhcp_discover').read()
-		p = DhcpPacket.from_wire(octets)
-		self.assertEquals(p.op, 1)
-		self.assertEquals(p.htype, 1)
-		self.assertEquals(p.hlen, 6)
-		self.assertEquals(p.hops, 0)
-		self.assertEquals(p.ciaddr, "0.0.0.0")
-		self.assertEquals(p.get_option(53, DHCP_TYPE_UINT8), 1)
-		self.assertEquals(p.get_option(93, DHCP_TYPE_UINT16), 0)
-		self.assertEquals(p.get_option(60, DHCP_TYPE_STRING), "PXEClient:Arch:00000:UNDI:002001")
-		
-		# Serialize and unserialize a packet, then check against original
-		p2 = DhcpPacket.from_wire(p.to_wire())
-		for header_def in _dhcp_headers:
-			self.assertEquals(getattr(p, header_def.name), getattr(p2, header_def.name))
-		self.assertEquals(p._options, p2._options)
+

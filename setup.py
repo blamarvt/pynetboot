@@ -1,12 +1,12 @@
 #!/usr/bin/env python
-from setuptools import setup, find_packages
+import setuptools
 
-setup(
-	name         = 'pynetboot',
-	version      = '0.2a',
-	description  = 'Python DHCP server specifically designed to be used with gPXE for network booting',
-	author       = 'Brian Lamar',
-	author_email = 'brian.lamar@rackspace.com',
-	url          = 'http://www.pynetboot.com',
-	packages     = find_packages()
+setuptools.setup(
+    name="pynetboot",
+    version="0.2a",
+    description="Services surrounding network bootstraping of an environment.",
+    author="Brian Lamar",
+    author_email="brian.lamar@rackspace.com",
+    url="http://www.pynetboot.com",
+    packages=["pynetboot"],
 )
