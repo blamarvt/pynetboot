@@ -1,16 +1,16 @@
 # Copyright 2010 by Brian Lamar (brian.lamar@rackspace.com)
 # Copyright 2010 by Nicholas VonHollen (nicholas.vonhollen@rackspace.com)
-# 
-# Licensed under the Apache License, Version 2.0 (the "License"); 
-# you may not use this file except in compliance with the License. 
-# You may obtain a copy of the License at 
 #
-#       http://www.apache.org/licenses/LICENSE-2.0 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# Unless required by applicable law or agreed to in writing, software 
-# distributed under the License is distributed on an "AS IS" BASIS, 
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
-# See the License for the specific language governing permissions and 
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
 # limitations under the License.
 import socket, IN
 import select
@@ -22,13 +22,17 @@ import logging
 
 from pynetboot.packet import *
 
-class DhcpServer(object):
+class DHCPServer(object):
+    """Serves DHCP client requests."""
 
-	def __init__(self, ip, interface='', recv_port=67, send_port=68):
-		self.ip = ip
-		self.interface = interface
-		self.recv_port = recv_port
-		self.send_port = send_port
+    _default_interface = ""
+    _default_recv_port = 67
+    _default_send_port = 68
+
+	def __init__(self, **kwargs):
+		self.interface = kwargs.get("interface", self._default_interface)
+		self.recv_port = kwargs.get("recv_port", self._default_recv_port)
+		self.send_port = kwargs.get("send_port", self._default_send_port)
 
 		logging.debug("self.raw_socket.bind((%s, 0x0800))" % self.interface)
 
@@ -47,7 +51,7 @@ class DhcpServer(object):
 		logging.info("Entering DhcpServer recv loop...")
 
 		while self._keep_going:
-		
+
 			try:
 				(data, src_ip) = self.socket.recvfrom(65535)
 
@@ -104,7 +108,7 @@ class GpxeDhcpServer(DhcpServer):
 		import tftpy
 		self.tftp_server = tftpy.TftpServer(path)
 		self.tftp_server.listen('', port)
-	
+
 	def handle_request(self, packet):
 		logging.info("Handling DHCPREQUEST from %s" % MAC.load(packet.chaddr[:6])[1])
 		self.packet.join_sequence(packet.chaddr, packet.xid)

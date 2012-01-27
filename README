@@ -1,0 +1,12 @@
+Goal: Host Provisioning with Python 
+
+1) Always have machines PXE
+2a) MAC recognized as 'needs provisioning', so PXE installation ensues
+2b) MAC not recognized, so it is ignored, or given random IP and machine boots normally
+
+Tools:
+
+1) DHCP server
+2) TFTP server
+3) GPXE (might not be needed)
+4) Database of MAC addresses, IP address ranges, and boot images/ISOs/configuration
